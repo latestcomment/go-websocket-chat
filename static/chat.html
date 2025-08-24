@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Chat Channel: {{.Channel}}</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    .container {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    .header {
+      background-color: #007bff;
+      color: white;
+      padding: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .channel-info h2 {
+      margin: 0;
+      font-size: 24px;
+    }
+    .user-info {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+    .mode-badge {
+      background-color: rgba(255,255,255,0.2);
+      padding: 5px 10px;
+      border-radius: 15px;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+    .mode-badge.watcher {
+      background-color: #17a2b8;
+    }
+    .mode-badge.member {
+      background-color: #28a745;
+    }
+    #messages {
+      height: 400px;
+      overflow-y: auto;
+      padding: 20px;
+      background-color: #fafafa;
+    }
+    .message {
+      margin-bottom: 10px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      max-width: 80%;
+      word-wrap: break-word;
+    }
+    .system {
+      color: #666;
+      font-style: italic;
+      background-color: #e9ecef;
+      text-align: center;
+      max-width: 100%;
+      font-size: 14px;
+    }
+    .user {
+      background-color: white;
+      border-left: 4px solid #007bff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .user .sender {
+      font-weight: bold;
+      color: #007bff;
+      margin-bottom: 3px;
+    }
+    .user .text {
+      color: #333;
+    }
+    .input-area {
+      padding: 20px;
+      background-color: white;
+      border-top: 1px solid #eee;
+    }
+    .input-container {
+      display: flex;
+      gap: 10px;
+    }
+    #msg {
+      flex: 1;
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 25px;
+      font-size: 16px;
+      outline: none;
+    }
+    #msg:focus {
+      border-color: #007bff;
+    }
+    #msg:disabled {
+      background-color: #f8f9fa;
+      cursor: not-allowed;
+    }
+    button {
+      padding: 12px 24px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 25px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    button:hover:not(:disabled) {
+      background-color: #0056b3;
+    }
+    button:disabled {
+      background-color: #6c757d;
+      cursor: not-allowed;
+    }
+    .watch-notice {
+      background-color: #fff3cd;
+      color: #856404;
+      padding: 10px;
+      text-align: center;
+      font-size: 14px;
+      border-top: 1px solid #ffeaa7;
+    }
+    .connection-status {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 5px 10px;
+      border-radius: 15px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .status-connected {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    .status-disconnected {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    .back-link {
+      color: white;
+      text-decoration: none;
+      opacity: 0.9;
+      font-size: 14px;
+    }
+    .back-link:hover {
+      opacity: 1;
+      text-decoration: underline;
+    }
+    .engage-area {
+      background-color: #fff3cd;
+      border: 1px solid #ffeaa7;
+      padding: 20px;
+      text-align: center;
+      border-bottom: 1px solid #eee;
+    }
+    .engage-container p {
+      margin: 0 0 15px 0;
+      font-weight: bold;
+      color: #856404;
+    }
+    .btn-engage {
+      background-color: #28a745;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 25px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    .btn-engage:hover {
+      background-color: #218838;
+    }
+    .btn-engage:disabled {
+      background-color: #6c757d;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="channel-info">
+        <h2>📺 {{.Channel}}</h2>
+        <div class="user-info">
+          👤 {{.Name}}
+          {{if .CanSend}}
+          <span class="mode-badge member">🔐 Member</span>
+          {{else}}
+          <span class="mode-badge watcher">👁️ Watcher</span>
+          {{end}}
+        </div>
+      </div>
+      <a href="javascript:history.back()" class="back-link">← Back to Channels</a>
+    </div>
+    
+    <div class="connection-status status-disconnected" id="connectionStatus">
+      ❌ Connecting...
+    </div>
+    
+    <div id="messages"></div>
+    
+    {{if not .CanSend}}
+    <div class="watch-notice">
+      👁️ You are watching this channel in read-only mode. Join with the channel password to send messages.
+    </div>
+    {{end}}
+    
+    {{if .CanSend}}
+    <div class="engage-area" id="engageArea" style="display: none;">
+      <div class="engage-container">
+        <p>🤔 Are you ready to engage in the debate?</p>
+        <button id="engageBtn" class="btn-engage" onclick="engageReady()">
+          🚀 Engage
+        </button>
+      </div>
+    </div>
+    {{end}}
+    
+    <div class="input-area">
+      <div class="input-container">
+        <input 
+          id="msg" 
+          placeholder="{{if .CanSend}}Type a message...{{else}}Watching mode - cannot send messages{{end}}" 
+          autocomplete="off"
+          {{if not .CanSend}}disabled{{end}}
+          maxlength="500"
+        >
+        <button onclick="sendMessage()" {{if not .CanSend}}disabled{{end}}>
+          {{if .CanSend}}Send{{else}}Watch Only{{end}}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const name = "{{.Name}}";
+    const channel = "{{.Channel}}";
+    const canSend = {{.CanSend}};
+
+    // Match your Fiber route: /ws/:channel/:name/:password?
+    // Only add password to URL if user can send (joined with password)
+    const wsUrl = canSend ? 
+      `ws://localhost:3000/ws/${channel}/${name}/{{.Password}}` : 
+      `ws://localhost:3000/ws/${channel}/${name}`;
+    const socket = new WebSocket(wsUrl);
+
+    socket.onopen = () => {
+      console.log("✅ Connected to chat room:", channel);
+      updateConnectionStatus(true);
+    };
+
+    socket.onmessage = (event) => {
+      const msg = JSON.parse(event.data);
+      const chatBox = document.getElementById("messages");
+
+      const div = document.createElement("div");
+      div.className = `message ${msg.senderType === "system" ? "system" : "user"}`;
+
+      if (msg.senderType === "system") {
+        div.innerHTML = msg.text;
+        
+        // Show engage button when system asks if users are ready
+        if (msg.text.includes("Are you ready to engage") && canSend) {
+          showEngageButton();
+        }
+        
+        // Hide engage button when debate starts
+        if (msg.text.includes("The debate battle begins")) {
+          hideEngageButton();
+        }
+      } else {
+        div.innerHTML = `
+          <div class="sender">${msg.sender}:</div>
+          <div class="text">${msg.text}</div>
+        `;
+      }
+
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight; // Auto-scroll
+    };
+
+    socket.onclose = () => {
+      console.log("❌ Disconnected from chat room");
+      updateConnectionStatus(false);
+    };
+
+    socket.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      updateConnectionStatus(false);
+    };
+
+    function sendMessage() {
+      if (!canSend) return;
+      
+      const input = document.getElementById("msg");
+      const message = input.value.trim();
+      
+      if (message && socket.readyState === WebSocket.OPEN) {
+        socket.send(message);
+        input.value = "";
+      }
+    }
+
+    function updateConnectionStatus(connected) {
+      const statusEl = document.getElementById("connectionStatus");
+      if (connected) {
+        statusEl.className = "connection-status status-connected";
+        statusEl.innerHTML = "✅ Connected";
+      } else {
+        statusEl.className = "connection-status status-disconnected";
+        statusEl.innerHTML = "❌ Disconnected";
+      }
+    }
+
+    function showEngageButton() {
+      const engageArea = document.getElementById("engageArea");
+      if (engageArea) {
+        engageArea.style.display = "block";
+      }
+    }
+
+    function hideEngageButton() {
+      const engageArea = document.getElementById("engageArea");
+      if (engageArea) {
+        engageArea.style.display = "none";
+      }
+    }
+
+    function engageReady() {
+      if (socket.readyState === WebSocket.OPEN) {
+        // Send special engage command
+        socket.send("__ENGAGE__");
+        
+        // Disable the button
+        const engageBtn = document.getElementById("engageBtn");
+        if (engageBtn) {
+          engageBtn.disabled = true;
+          engageBtn.innerHTML = "✅ Ready!";
+        }
+      }
+    }
+
+    // Allow Enter key to send message (only if can send)
+    if (canSend) {
+      document.getElementById("msg").addEventListener("keypress", function(e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
+
+      // Focus on input when page loads
+      window.onload = function() {
+        document.getElementById("msg").focus();
+      };
+    }
+
+    // Handle visibility change to show connection status
+    document.addEventListener("visibilitychange", function() {
+      if (!document.hidden && socket.readyState !== WebSocket.OPEN) {
+        updateConnectionStatus(false);
+      }
+    });
+  </script>
+</body>
+</html>

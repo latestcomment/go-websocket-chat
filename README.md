@@ -1,3 +1,1 @@
 # go-websocket-chat
-
-Test

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>WebSocket Chat - Login</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 400px;
+      margin: 50px auto;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 30px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 5px;
+      font-size: 16px;
+      margin-bottom: 20px;
+      box-sizing: border-box;
+    }
+    input[type="text"]:focus {
+      border-color: #007bff;
+      outline: none;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .error {
+      color: red;
+      font-size: 14px;
+      margin-top: 10px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚀 WebSocket Chat</h1>
+    <form method="POST" action="/channel" onsubmit="return validateForm()">
+      <input 
+        type="text" 
+        name="name" 
+        id="name"
+        placeholder="Enter your name" 
+        required
+        maxlength="50"
+      >
+      <button type="submit">Enter Chat</button>
+      <div class="error" id="error">Please enter a valid name</div>
+    </form>
+  </div>
+
+  <script>
+    function validateForm() {
+      const nameInput = document.getElementById('name');
+      const errorDiv = document.getElementById('error');
+      const name = nameInput.value.trim();
+
+      if (name.length < 1 || name.length > 50) {
+        errorDiv.style.display = 'block';
+        return false;
+      }
+
+      errorDiv.style.display = 'none';
+      return true;
+    }
+
+    // Focus on name input when page loads
+    window.onload = function() {
+      document.getElementById('name').focus();
+    };
+
+    // Allow Enter key to submit
+    document.getElementById('name').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (validateForm()) {
+          this.form.submit();
+        }
+      }
+    });
+  </script>
+</body>
+</html>
