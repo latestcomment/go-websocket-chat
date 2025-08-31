@@ -50,14 +50,18 @@
       overflow-y: auto;
       padding: 20px;
       background-color: #fafafa;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
     .message {
-      margin-bottom: 10px;
       padding: 8px 12px;
       border-radius: 8px;
       max-width: 80%;
       word-wrap: break-word;
     }
+    
+    /* System messages - center */
     .system {
       color: #666;
       font-style: italic;
@@ -65,19 +69,157 @@
       text-align: center;
       max-width: 100%;
       font-size: 14px;
+      align-self: center;
+      margin: 0 auto;
     }
-    .user {
+    
+    /* Current user messages - right side */
+    .user.own {
+      background-color: #007bff;
+      color: white;
+      align-self: flex-end;
+      margin-left: auto;
+      border-radius: 18px 18px 4px 18px;
+    }
+    
+    /* Other participant messages - left side */
+    .user.other {
       background-color: white;
-      border-left: 4px solid #007bff;
+      border-left: 4px solid #28a745;
       box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      align-self: flex-start;
+      margin-right: auto;
+      border-radius: 18px 18px 18px 4px;
     }
-    .user .sender {
+    
+    /* AI Moderator messages - beautiful but simple */
+    .ai {
+      background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+      border: 1px solid #2196f3;
+      border-left: 4px solid #1976d2;
+      color: #0d47a1;
+      max-width: 90%;
+      align-self: center;
+      margin: 15px auto;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(33, 150, 243, 0.1);
+      padding: 15px;
+    }
+    
+    /* AI Judge messages - beautiful but simple red theme */
+    .judge {
+      background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+      border: 1px solid #f44336;
+      border-left: 4px solid #d32f2f;
+      color: #b71c1c;
+      max-width: 90%;
+      align-self: center;
+      margin: 20px auto;
+      border-radius: 12px;
+      box-shadow: 0 2px 10px rgba(244, 67, 54, 0.15);
+      padding: 15px;
+    }
+    
+    /* Sender styling for user messages */
+    .user.own .sender {
       font-weight: bold;
-      color: #007bff;
+      color: rgba(255,255,255,0.8);
       margin-bottom: 3px;
+      font-size: 12px;
     }
-    .user .text {
+    
+    .user.other .sender {
+      font-weight: bold;
+      color: #28a745;
+      margin-bottom: 3px;
+      font-size: 12px;
+    }
+    
+    .user.own .text {
+      color: white;
+    }
+    
+    .user.other .text {
       color: #333;
+    }
+    
+    /* Sender styling for AI messages */
+    .ai .sender, .judge .sender {
+      font-weight: bold;
+      font-size: 14px;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    
+    .ai .sender {
+      color: #1565c0;
+    }
+    
+    .judge .sender {
+      color: #c62828;
+    }
+    
+    .ai .text, .judge .text {
+      line-height: 1.6;
+      font-size: 14px;
+      text-align: left;
+    }
+    
+    /* Simple formatting for readability */
+    .ai .text strong, .judge .text strong {
+      font-weight: bold;
+      color: inherit;
+    }
+    
+    .ai .text strong {
+      color: #1565c0;
+    }
+    
+    .judge .text strong {
+      color: #c62828;
+    }
+    
+    /* Processing message styles */
+    .ai-processing, .judge-processing {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 15px;
+      border-radius: 12px;
+      font-style: italic;
+      animation: pulse 2s infinite;
+    }
+    
+    .ai-processing {
+      background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+      color: #0d47a1;
+      border-left: 4px solid #1976d2;
+    }
+    
+    .judge-processing {
+      background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+      color: #b71c1c;
+      border-left: 4px solid #d32f2f;
+    }
+    
+    .processing-spinner {
+      font-size: 18px;
+      animation: rotate 2s linear infinite;
+    }
+    
+    .processing-text {
+      flex: 1;
+      font-weight: 500;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    
+    @keyframes rotate {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
     .input-area {
       padding: 20px;
@@ -87,21 +229,30 @@
     .input-container {
       display: flex;
       gap: 10px;
+      align-items: flex-end;
     }
     #msg {
       flex: 1;
       padding: 12px;
       border: 2px solid #ddd;
-      border-radius: 25px;
+      border-radius: 15px;
       font-size: 16px;
       outline: none;
+      font-family: inherit;
+      line-height: 1.4;
+      min-height: 44px;
+      max-height: 120px;
+      transition: border-color 0.3s, box-shadow 0.3s;
     }
     #msg:focus {
       border-color: #007bff;
+      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
     }
     #msg:disabled {
       background-color: #f8f9fa;
       cursor: not-allowed;
+      color: #6c757d;
+      font-style: italic;
     }
     button {
       padding: 12px 24px;
@@ -228,15 +379,17 @@
     
     <div class="input-area">
       <div class="input-container">
-        <input 
+        <textarea 
           id="msg" 
-          placeholder="{{if .CanSend}}Type a message...{{else}}Watching mode - cannot send messages{{end}}" 
+          placeholder="{{if .CanSend}}Waiting for debate to begin...{{else}}Watching mode - cannot send messages{{end}}" 
           autocomplete="off"
-          {{if not .CanSend}}disabled{{end}}
+          {{if not .CanSend}}disabled{{else}}disabled{{end}}
           maxlength="500"
-        >
-        <button onclick="sendMessage()" {{if not .CanSend}}disabled{{end}}>
-          {{if .CanSend}}Send{{else}}Watch Only{{end}}
+          rows="1"
+          style="resize: none; overflow: hidden;"
+        ></textarea>
+        <button onclick="sendMessage()" {{if not .CanSend}}disabled{{else}}disabled{{end}}>
+          {{if .CanSend}}Waiting...{{else}}Watch Only{{end}}
         </button>
       </div>
     </div>
@@ -264,27 +417,124 @@
       const chatBox = document.getElementById("messages");
 
       const div = document.createElement("div");
-      div.className = `message ${msg.senderType === "system" ? "system" : "user"}`;
-
+      
+      // Determine message type and positioning
+      let messageClass = "message ";
+      
       if (msg.senderType === "system") {
+        messageClass += "system";
         div.innerHTML = msg.text;
+        
+        // Handle phase submission states
+        if (msg.text.includes("Your response has been submitted. Waiting for other participants")) {
+          handleSubmissionWaiting();
+          return; // Don't show this message in chat, handle it in input
+        }
         
         // Show engage button when system asks if users are ready
         if (msg.text.includes("Are you ready to engage") && canSend) {
           showEngageButton();
         }
         
-        // Hide engage button when debate starts
+        // Hide engage button when debate starts and enable input for Phase 1
         if (msg.text.includes("The debate battle begins")) {
           hideEngageButton();
+          enableInput(); // Enable input when debate actually begins
         }
-      } else {
+        
+        // Handle AI analysis start
+        if (msg.text.includes("AI Moderator is analyzing the responses")) {
+          handleAIGenerating();
+          // Store this message with a special ID for later replacement
+          div.id = "ai-moderator-processing";
+          div.innerHTML = `
+            <div class="ai-processing">
+              <div class="processing-spinner">🤖</div>
+              <div class="processing-text">AI Moderator is analyzing the responses...</div>
+            </div>
+          `;
+        }
+        
+        // Handle AI Judge generation start
+        if (msg.text.includes("AI Judge is evaluating the complete debate")) {
+          handleJudgeGenerating();
+          // Store this message with a special ID for later replacement
+          div.id = "ai-judge-processing";
+          div.innerHTML = `
+            <div class="judge-processing">
+              <div class="processing-spinner">⚖️</div>
+              <div class="processing-text">AI Judge is evaluating the complete debate and preparing the final verdict...</div>
+            </div>
+          `;
+        }
+        
+        // Handle phase transitions - re-enable input
+        if (msg.text.includes("Phase ") && (msg.text.includes("Opening Statements") || msg.text.includes("Rebuttals") || msg.text.includes("Questions") || msg.text.includes("Answers") || msg.text.includes("Closing Statements"))) {
+          enableInput();
+        }
+      } else if (msg.senderType === "ai") {
+        // AI Moderator - replace processing message with actual response
+        const processingMsg = document.getElementById("ai-moderator-processing");
+        if (processingMsg) {
+          // Replace the processing message
+          processingMsg.className = "message ai";
+          processingMsg.id = ""; // Remove the ID
+          processingMsg.innerHTML = `
+            <div class="sender">🤖 ${msg.sender}</div>
+            <div class="text">${msg.text}</div>
+          `;
+          // AI analysis is complete, re-enable input for next phase
+          enableInput();
+          return; // Don't create a new message
+        } else {
+          // Fallback: create new message if processing message not found
+          messageClass += "ai";
+          div.innerHTML = `
+            <div class="sender">🤖 ${msg.sender}</div>
+            <div class="text">${msg.text}</div>
+          `;
+          enableInput();
+        }
+      } else if (msg.senderType === "judge") {
+        // AI Judge - replace processing message with actual response
+        const processingMsg = document.getElementById("ai-judge-processing");
+        if (processingMsg) {
+          // Replace the processing message
+          processingMsg.className = "message judge";
+          processingMsg.id = ""; // Remove the ID
+          processingMsg.innerHTML = `
+            <div class="sender">⚖️ ${msg.sender}</div>
+            <div class="text">${msg.text}</div>
+          `;
+          // Final judgment complete, show debate concluded state
+          handleDebateCompleted();
+          return; // Don't create a new message
+        } else {
+          // Fallback: create new message if processing message not found
+          messageClass += "judge";
+          div.innerHTML = `
+            <div class="sender">⚖️ ${msg.sender}</div>
+            <div class="text">${msg.text}</div>
+          `;
+          handleDebateCompleted();
+        }
+      } else if (msg.senderType === "user") {
+        // User messages - position based on sender
+        if (msg.sender === name) {
+          // Current user's messages - right side
+          messageClass += "user own";
+        } else {
+          // Other participants - left side
+          messageClass += "user other";
+        }
+        
         div.innerHTML = `
           <div class="sender">${msg.sender}:</div>
           <div class="text">${msg.text}</div>
         `;
       }
-
+      
+      div.className = messageClass;
       chatBox.appendChild(div);
       chatBox.scrollTop = chatBox.scrollHeight; // Auto-scroll
     };
@@ -308,9 +558,121 @@
       if (message && socket.readyState === WebSocket.OPEN) {
         socket.send(message);
         input.value = "";
+        autoResize(input); // Reset height after sending
+        
+        // Immediately disable input after sending during debate phases
+        // The backend will send confirmation and trigger handleSubmissionWaiting
       }
     }
 
+    function autoResize(textarea) {
+      // Reset height to calculate new height
+      textarea.style.height = 'auto';
+      
+      // Set height based on scroll height, but limit to max-height
+      const newHeight = Math.min(textarea.scrollHeight, 120);
+      textarea.style.height = newHeight + 'px';
+    }
+
+    function handleSubmissionWaiting() {
+      if (!canSend) return;
+      
+      const input = document.getElementById("msg");
+      const button = document.querySelector("button[onclick='sendMessage()']");
+      
+      // Disable input and button
+      input.disabled = true;
+      input.value = "";
+      input.placeholder = "⏳ Your response has been submitted. Waiting for other participants...";
+      button.disabled = true;
+      button.innerHTML = "Waiting...";
+      
+      // Add waiting style
+      input.style.backgroundColor = "#fff3cd";
+      input.style.color = "#856404";
+      input.style.fontStyle = "italic";
+    }
+    
+    function handleAIGenerating() {
+      if (!canSend) return;
+      
+      const input = document.getElementById("msg");
+      const button = document.querySelector("button[onclick='sendMessage()']");
+      
+      // Disable input and button for AI generation
+      input.disabled = true;
+      input.value = "";
+      input.placeholder = "🤖 Waiting for AI moderator generating...";
+      button.disabled = true;
+      button.innerHTML = "AI Working...";
+      
+      // Add AI generation style (blue theme)
+      input.style.backgroundColor = "#e3f2fd";
+      input.style.color = "#0d47a1";
+      input.style.fontStyle = "italic";
+    }
+
+    function handleJudgeGenerating() {
+      if (!canSend) return;
+      
+      const input = document.getElementById("msg");
+      const button = document.querySelector("button[onclick='sendMessage()']");
+      
+      // Disable input and button for AI Judge generation
+      input.disabled = true;
+      input.value = "";
+      input.placeholder = "⚖️ AI Judge is preparing the final verdict...";
+      button.disabled = true;
+      button.innerHTML = "Judge Working...";
+      
+      // Add AI Judge generation style (red theme)
+      input.style.backgroundColor = "#ffebee";
+      input.style.color = "#b71c1c";
+      input.style.fontStyle = "italic";
+    }
+
+    function handleDebateCompleted() {
+      if (!canSend) return;
+      
+      const input = document.getElementById("msg");
+      const button = document.querySelector("button[onclick='sendMessage()']");
+      
+      // Disable input permanently after debate conclusion
+      input.disabled = true;
+      input.value = "";
+      input.placeholder = "🏁 Debate concluded. Thank you for participating!";
+      button.disabled = true;
+      button.innerHTML = "Completed";
+      
+      // Add completion style (green theme)
+      input.style.backgroundColor = "#e8f5e8";
+      input.style.color = "#2e7d32";
+      input.style.fontStyle = "italic";
+    }
+
+    function enableInput() {
+      if (!canSend) return;
+      
+      const input = document.getElementById("msg");
+      const button = document.querySelector("button[onclick='sendMessage()']");
+      
+      // Re-enable input and button
+      input.disabled = false;
+      input.value = "";
+      input.placeholder = "Type a message...";
+      button.disabled = false;
+      button.innerHTML = "Send";
+      
+      // Remove waiting style and reset height
+      input.style.backgroundColor = "";
+      input.style.color = "";
+      input.style.fontStyle = "";
+      input.style.height = "auto";
+      
+      // Focus on input for immediate typing
+      input.focus();
+    }
+    
     function updateConnectionStatus(connected) {
       const statusEl = document.getElementById("connectionStatus");
       if (connected) {
@@ -350,19 +712,29 @@
       }
     }
 
-    // Allow Enter key to send message (only if can send)
+    // Setup textarea functionality (only if can send)
     if (canSend) {
-      document.getElementById("msg").addEventListener("keypress", function(e) {
-        if (e.key === "Enter") {
+      const textarea = document.getElementById("msg");
+      
+      // Allow Enter key to send message (Shift+Enter for new line)
+      textarea.addEventListener("keypress", function(e) {
+        if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           sendMessage();
         }
       });
 
-      // Focus on input when page loads
-      window.onload = function() {
-        document.getElementById("msg").focus();
-      };
+      // Auto-resize as user types
+      textarea.addEventListener("input", function() {
+        autoResize(this);
+      });
+
+      // Auto-resize on paste
+      textarea.addEventListener("paste", function() {
+        setTimeout(() => autoResize(this), 0);
+      });
+
+      // Don't auto-focus on page load - wait for debate to begin
     }
 
     // Handle visibility change to show connection status

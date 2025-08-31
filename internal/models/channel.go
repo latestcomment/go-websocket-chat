@@ -13,7 +13,7 @@ type Channel struct {
 	Password               string
 	Clients                map[uuid.UUID]*Client
 	Messages               []Message
-	LastSender             string
+	PendingMessages        []Message                   // Messages waiting to be revealed simultaneously
 	ClientCount            int
 	Phase                  Phase
 	PhaseParticipants      map[string]map[string]bool // Track which participants contributed in each phase

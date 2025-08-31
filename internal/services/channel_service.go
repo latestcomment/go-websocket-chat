@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gofiber/websocket/v2"
@@ -32,6 +33,7 @@ func (s *ChannelService) CreateChannel(name string, inputPassword string) *model
 		Password:              inputPswd,
 		Clients:               make(map[uuid.UUID]*models.Client),
 		Messages:              []models.Message{},
+		PendingMessages:       []models.Message{},
 		ClientCount:           0,
 		Phase:                 phase,
 		PhaseParticipants:     make(map[string]map[string]bool),
@@ -95,10 +97,6 @@ func (s *ChannelService) RemoveClient(ch *models.Channel, c *models.Client) {
 func (s *ChannelService) BroadcastMessage(ch *models.Channel, msg models.Message) {
 	ch.Mu.Lock()
 	ch.Messages = append(ch.Messages, msg)
-	// Update LastSender only for user messages (not system messages)
-	if msg.SenderType == "user" {
-		ch.LastSender = msg.SenderName
-	}
 	ch.Mu.Unlock()
 
 	for _, client := range ch.Clients {
@@ -135,20 +133,6 @@ func (s *ChannelService) LoopMessages(ch *models.Channel, c *websocket.Conn, cli
 			continue
 		}
 
-		// Check if this user sent the last message (turn-based rule)
-		ch.Mu.Lock()
-		if ch.LastSender == client.Name {
-			ch.Mu.Unlock()
-			// Notify the client they must wait for their turn
-			c.WriteJSON(models.Message{
-				SenderType: "system",
-				SenderName: "system",
-				Text:       "Please wait for another user to send a message before sending again",
-				Timestamp:  time.Now(),
-			})
-			continue
-		}
-		ch.Mu.Unlock()
 
 		msg := models.Message{
 			SenderType: "user",
@@ -156,12 +140,105 @@ func (s *ChannelService) LoopMessages(ch *models.Channel, c *websocket.Conn, cli
 			Text:       messageText,
 			Timestamp:  time.Now(),
 		}
-		s.BroadcastMessage(ch, msg)
 		
-		// Check if we should progress to next phase
-		s.checkPhaseProgression(ch, client)
+		// During active debate phases (1-5), store messages as pending
+		ch.Mu.Lock()
+		currentPhase := ch.Phase.Id
+		ch.Mu.Unlock()
+		
+		if currentPhase >= 1 && currentPhase <= 5 {
+			s.handlePhaseMessage(ch, msg, client)
+		} else {
+			// In phase 0 (lobby), broadcast immediately
+			s.BroadcastMessage(ch, msg)
+		}
 	}
 }
+
+// handlePhaseMessage handles messages during active debate phases
+func (s *ChannelService) handlePhaseMessage(ch *models.Channel, msg models.Message, client *models.Client) {
+	ch.Mu.Lock()
+	
+	currentPhase := ch.Phase.Id
+	phaseKey := fmt.Sprintf("phase_%d", currentPhase)
+	
+	// Initialize phase participants if needed
+	if ch.PhaseParticipants[phaseKey] == nil {
+		ch.PhaseParticipants[phaseKey] = make(map[string]bool)
+	}
+	
+	// Check if this participant has already submitted for this phase
+	if ch.PhaseParticipants[phaseKey][client.Name] {
+		ch.Mu.Unlock()
+		// Already submitted, send notification
+		errorMsg := models.Message{
+			SenderType: "system",
+			SenderName: "system",
+			Text:       "⏳ You have already submitted your response for this phase. Please wait for other participants.",
+			Timestamp:  time.Now(),
+		}
+		// Send only to this client
+		if client.Conn != nil {
+			client.Conn.WriteJSON(errorMsg)
+		}
+		return
+	}
+	
+	// Add message to pending and mark participant as contributed
+	ch.PendingMessages = append(ch.PendingMessages, msg)
+	ch.PhaseParticipants[phaseKey][client.Name] = true
+	
+	// Send confirmation to this client only (not broadcast)
+	confirmMsg := models.Message{
+		SenderType: "system", 
+		SenderName: "system",
+		Text:       "✅ Your response has been submitted. Waiting for other participants...",
+		Timestamp:  time.Now(),
+	}
+	if client.Conn != nil {
+		client.Conn.WriteJSON(confirmMsg)
+	}
+	
+	// Count active participants
+	activeParticipants := 0
+	for _, c := range ch.Clients {
+		if c.CanSend {
+			activeParticipants++
+		}
+	}
+	
+	// Check if all participants have submitted
+	if len(ch.PhaseParticipants[phaseKey]) >= activeParticipants {
+		// Release all pending messages simultaneously
+		pendingMsgs := make([]models.Message, len(ch.PendingMessages))
+		copy(pendingMsgs, ch.PendingMessages)
+		ch.PendingMessages = []models.Message{}
+		
+		// Unlock before broadcasting and phase completion
+		ch.Mu.Unlock()
+		
+		// Broadcast all pending messages
+		for _, msg := range pendingMsgs {
+			s.BroadcastMessage(ch, msg)
+		}
+		
+		// Notify that AI analysis is starting
+		aiStartMsg := models.Message{
+			SenderType: "system",
+			SenderName: "system", 
+			Text:       "🤖 AI Moderator is analyzing the responses...",
+			Timestamp:  time.Now(),
+		}
+		s.BroadcastMessage(ch, aiStartMsg)
+		
+		// Handle phase completion
+		s.handlePhaseCompletion(ch, currentPhase)
+		return
+	}
+	
+	ch.Mu.Unlock()
+}
+
 
 // HandleClientEngage marks a client as ready and checks if debate can start
 func (s *ChannelService) HandleClientEngage(ch *models.Channel, client *models.Client) {
@@ -210,46 +287,263 @@ func (s *ChannelService) HandleClientEngage(ch *models.Channel, client *models.C
 		
 		// Initialize phase participant tracking
 		ch.PhaseParticipants = make(map[string]map[string]bool)
+		ch.PendingMessages = []models.Message{}
 	}
 }
 
-// checkPhaseProgression checks if both participants have contributed and advances phase
-func (s *ChannelService) checkPhaseProgression(ch *models.Channel, client *models.Client) {
-	ch.Mu.Lock()
 
-	currentPhase := ch.Phase.Id
-	if currentPhase == 0 || currentPhase >= 6 {
-		ch.Mu.Unlock()
-		return // Not in active debate phases
+// handlePhaseCompletion processes AI analysis when a phase is completed
+func (s *ChannelService) handlePhaseCompletion(ch *models.Channel, completedPhase int) {
+	// Collect messages from the completed phase
+	phaseMessages := s.getPhaseMessages(ch, completedPhase)
+	
+	if len(phaseMessages) > 0 {
+		// Create context for AI analysis
+		context := s.createPhaseContext(completedPhase, phaseMessages)
+		
+		// Send AI request with phase-specific prompt
+		aiResponse, err := s.sendPhaseSpecificAIRequest(completedPhase, context)
+		if err != nil {
+			fmt.Printf("Error getting AI analysis: %v\n", err)
+			aiResponse = "Unable to provide analysis at this time."
+		}
+		
+		// Broadcast AI analysis
+		aiMessage := models.Message{
+			SenderType: "ai",
+			SenderName: "AI Moderator",
+			Text:       fmt.Sprintf("📊 **Phase %d Analysis**: %s", completedPhase, aiResponse),
+			Timestamp:  time.Now(),
+		}
+		s.BroadcastMessage(ch, aiMessage)
 	}
+	
+	// Progress to next phase after AI analysis
+	s.progressToNextPhase(ch)
+}
 
-	// Count how many active participants we have
-	activeParticipants := 0
-	for _, c := range ch.Clients {
-		if c.CanSend {
-			activeParticipants++
+// getPhaseMessages collects user messages from the specified phase
+func (s *ChannelService) getPhaseMessages(ch *models.Channel, phaseId int) []models.Message {
+	ch.Mu.Lock()
+	defer ch.Mu.Unlock()
+	
+	var phaseMessages []models.Message
+	phaseKey := fmt.Sprintf("phase_%d", phaseId)
+	
+	// Get participants who contributed in this phase
+	participants := ch.PhaseParticipants[phaseKey]
+	
+	// Collect the most recent messages from each participant in this phase
+	for _, msg := range ch.Messages {
+		if msg.SenderType == "user" {
+			if _, participated := participants[msg.SenderName]; participated {
+				phaseMessages = append(phaseMessages, msg)
+			}
 		}
 	}
+	
+	return phaseMessages
+}
 
-	// Track that this participant has contributed to current phase
-	phaseKey := fmt.Sprintf("phase_%d", currentPhase)
-	if ch.PhaseParticipants[phaseKey] == nil {
-		ch.PhaseParticipants[phaseKey] = make(map[string]bool)
+// createPhaseContext creates context string for AI analysis
+func (s *ChannelService) createPhaseContext(phaseId int, messages []models.Message) string {
+	var phaseName string
+	switch phaseId {
+	case 1:
+		phaseName = "Opening Statements"
+	case 2:
+		phaseName = "Rebuttals"
+	case 3:
+		phaseName = "Questions"
+	case 4:
+		phaseName = "Answers"
+	case 5:
+		phaseName = "Closing Statements"
+	default:
+		phaseName = "Discussion"
 	}
 	
-	// Mark this participant as having contributed
-	ch.PhaseParticipants[phaseKey][client.Name] = true
-
-	// Check if all participants have contributed
-	if len(ch.PhaseParticipants[phaseKey]) >= activeParticipants {
-		// All participants have contributed, move to next phase
-		// Unlock before calling progressToNextPhase to avoid deadlock
-		ch.Mu.Unlock()
-		s.progressToNextPhase(ch)
-		return
+	var builder strings.Builder
+	builder.WriteString(fmt.Sprintf("Phase %d - %s:\n\n", phaseId, phaseName))
+	
+	for _, msg := range messages {
+		builder.WriteString(fmt.Sprintf("%s: %s\n", msg.SenderName, msg.Text))
 	}
 	
-	ch.Mu.Unlock()
+	return builder.String()
+}
+
+// sendPhaseSpecificAIRequest sends AI request with phase-appropriate prompt
+func (s *ChannelService) sendPhaseSpecificAIRequest(phaseId int, context string) (string, error) {
+	var prompt string
+	
+	switch phaseId {
+	case 1:
+		prompt = `You are analyzing the opening statements phase of a debate. Please:
+1. Summarize the main arguments presented by each participant
+2. Identify the key positions and claims made
+3. Note the strength and clarity of each opening statement
+4. Point out any logical fallacies or weak arguments
+5. Assess whether the statements stay on topic
+Keep your analysis balanced, constructive, and under 200 words.`
+
+	case 2:
+		prompt = `You are analyzing the rebuttals phase of a debate. Please:
+1. Evaluate how well each participant addressed their opponent's arguments
+2. Identify effective counterarguments and refutations
+3. Note any new evidence or points introduced
+4. Point out missed opportunities to address key opposing arguments
+5. Assess the logical flow and persuasiveness of the rebuttals
+Keep your analysis balanced, constructive, and under 200 words.`
+
+	case 3:
+		prompt = `You are analyzing the questions phase of a debate. Please:
+1. Evaluate the quality and relevance of questions asked
+2. Assess whether questions effectively challenge key arguments
+3. Note if questions are fair and constructive or leading/hostile
+4. Identify strategic questioning that exposes weaknesses
+5. Point out any questions that are off-topic or inappropriate
+Keep your analysis balanced, constructive, and under 200 words.`
+
+	case 4:
+		prompt = `You are analyzing the answers phase of a debate. Please:
+1. Evaluate how well each participant answered the questions posed
+2. Note any evasive or incomplete answers
+3. Assess the honesty and directness of responses
+4. Identify strong, evidence-based answers
+5. Point out when answers introduce new relevant information
+Keep your analysis balanced, constructive, and under 200 words.`
+
+	case 5:
+		prompt = `You are analyzing the closing statements phase of a debate. Please:
+1. Evaluate how well each participant summarized their key arguments
+2. Assess the persuasiveness and emotional impact of closing statements
+3. Note effective use of evidence and logic in conclusions
+4. Identify the strongest final points made by each side
+5. Provide an overall assessment of which arguments were most compelling
+Keep your analysis balanced, constructive, and under 200 words.`
+
+	default:
+		prompt = `You are a moderator in this discussion. Please provide a balanced summary of the main points discussed, highlighting different perspectives and any consensus reached. Keep it concise and neutral. And point out any potential out of topic or inappropriate comments.`
+	}
+
+	return SendAIRequestWithCustomPrompt(prompt, context)
+}
+
+// provideFinalAIJudgment provides final AI verdict after all phases
+func (s *ChannelService) provideFinalAIJudgment(ch *models.Channel) {
+	// Notify that AI Judge is generating verdict
+	judgeStartMsg := models.Message{
+		SenderType: "system",
+		SenderName: "system",
+		Text:       "⚖️ AI Judge is evaluating the complete debate and preparing the final verdict...",
+		Timestamp:  time.Now(),
+	}
+	s.BroadcastMessage(ch, judgeStartMsg)
+	
+	// Collect all debate messages for comprehensive analysis
+	allDebateMessages := s.getAllDebateMessages(ch)
+	
+	if len(allDebateMessages) > 0 {
+		// Create comprehensive context for final judgment
+		context := s.createFinalJudgmentContext(allDebateMessages)
+		
+		// Get AI judgment
+		judgmentPrompt := `You are an impartial AI judge evaluating this complete debate. Please provide a comprehensive final verdict by:
+
+1. **Winner Declaration**: Clearly state which participant presented the stronger overall case and why
+2. **Argument Analysis**: Evaluate the strongest and weakest arguments from each side
+3. **Debate Performance**: Assess how well each participant engaged in the structured debate format
+4. **Evidence & Logic**: Comment on the quality of evidence, reasoning, and logical consistency
+5. **Persuasiveness**: Determine which viewpoint was most compelling and convincing
+6. **Key Turning Points**: Identify critical moments that influenced the debate outcome
+7. **Final Score**: Provide a score out of 10 for each participant with brief justification
+
+Be decisive in your judgment while explaining your reasoning. Your verdict should be clear and definitive.`
+
+		aiJudgment, err := SendAIRequestWithCustomPrompt(judgmentPrompt, context)
+		if err != nil {
+			fmt.Printf("Error getting AI judgment: %v\n", err)
+			aiJudgment = "Unable to provide final judgment at this time."
+		}
+
+		// Broadcast final judgment
+		judgmentMessage := models.Message{
+			SenderType: "judge",
+			SenderName: "AI Judge",
+			Text:       fmt.Sprintf("⚖️ **FINAL VERDICT** ⚖️\n\n%s", aiJudgment),
+			Timestamp:  time.Now(),
+		}
+		s.BroadcastMessage(ch, judgmentMessage)
+	}
+
+	// Send conclusion message
+	endMsg := models.Message{
+		SenderType: "system",
+		SenderName: "system",
+		Text:       "🏁 The debate has concluded. Thank you for participating!",
+		Timestamp:  time.Now(),
+	}
+	s.BroadcastMessage(ch, endMsg)
+}
+
+// getAllDebateMessages collects all user messages from the debate
+func (s *ChannelService) getAllDebateMessages(ch *models.Channel) []models.Message {
+	ch.Mu.Lock()
+	defer ch.Mu.Unlock()
+	
+	var debateMessages []models.Message
+	
+	// Collect all user messages (excluding system and ai messages)
+	for _, msg := range ch.Messages {
+		if msg.SenderType == "user" {
+			debateMessages = append(debateMessages, msg)
+		}
+	}
+	
+	return debateMessages
+}
+
+// createFinalJudgmentContext creates comprehensive context for final AI judgment
+func (s *ChannelService) createFinalJudgmentContext(messages []models.Message) string {
+	var builder strings.Builder
+	builder.WriteString("Complete Debate Transcript:\n")
+	builder.WriteString("=======================\n\n")
+	
+	// Group messages by phase for better context
+	phaseMessages := make(map[int][]models.Message)
+	currentPhase := 1
+	
+	for _, msg := range messages {
+		phaseMessages[currentPhase] = append(phaseMessages[currentPhase], msg)
+		
+		// Simple heuristic: assume roughly equal distribution across phases
+		// In a real implementation, you might track phase transitions more precisely
+		if len(phaseMessages[currentPhase]) >= 2 && currentPhase < 5 {
+			currentPhase++
+		}
+	}
+	
+	// Format by phases
+	phaseNames := map[int]string{
+		1: "Opening Statements",
+		2: "Rebuttals", 
+		3: "Questions",
+		4: "Answers",
+		5: "Closing Statements",
+	}
+	
+	for phase := 1; phase <= 5; phase++ {
+		if msgs, exists := phaseMessages[phase]; exists && len(msgs) > 0 {
+			builder.WriteString(fmt.Sprintf("## Phase %d - %s:\n", phase, phaseNames[phase]))
+			for _, msg := range msgs {
+				builder.WriteString(fmt.Sprintf("**%s**: %s\n\n", msg.SenderName, msg.Text))
+			}
+			builder.WriteString("\n")
+		}
+	}
+	
+	return builder.String()
 }
 
 // progressToNextPhase advances the debate to the next phase
@@ -259,15 +553,9 @@ func (s *ChannelService) progressToNextPhase(ch *models.Channel) {
 	nextPhaseId := ch.Phase.Id + 1
 	
 	if nextPhaseId > 5 {
-		// Debate concluded
+		// Debate concluded, get final AI judgment
 		ch.Mu.Unlock()
-		endMsg := models.Message{
-			SenderType: "system",
-			SenderName: "system",
-			Text:       "🏁 The debate has concluded. Thank you for participating!",
-			Timestamp:  time.Now(),
-		}
-		s.BroadcastMessage(ch, endMsg)
+		s.provideFinalAIJudgment(ch)
 		return
 	}
 
