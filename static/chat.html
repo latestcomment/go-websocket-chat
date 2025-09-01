@@ -92,9 +92,9 @@
       border-radius: 18px 18px 18px 4px;
     }
     
-    /* AI Moderator messages - beautiful but simple */
+    /* AI Moderator messages - white background with blue accents */
     .ai {
-      background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+      background: white;
       border: 1px solid #2196f3;
       border-left: 4px solid #1976d2;
       color: #0d47a1;
@@ -106,9 +106,9 @@
       padding: 15px;
     }
     
-    /* AI Judge messages - beautiful but simple red theme */
+    /* AI Judge messages - white background with red accents */
     .judge {
-      background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+      background: white;
       border: 1px solid #f44336;
       border-left: 4px solid #d32f2f;
       color: #b71c1c;
@@ -220,6 +220,128 @@
     @keyframes rotate {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
+    }
+
+    /* Professional Judge Report Styling */
+    .judge-header {
+      background: linear-gradient(135deg, #c62828 0%, #d32f2f 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+      border-radius: 12px 12px 0 0;
+      margin: -15px -15px 0 -15px;
+    }
+
+    .judge-title {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .judge-subtitle {
+      font-size: 14px;
+      opacity: 0.9;
+      font-style: italic;
+    }
+
+    .judge-report {
+      padding: 20px 0;
+    }
+
+    .judge-section {
+      margin-bottom: 20px;
+      background: white;
+      border-radius: 8px;
+      border-left: 4px solid #d32f2f;
+      overflow: hidden;
+      border: 1px solid #f0f0f0;
+    }
+
+    .judge-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .judge-section-title {
+      background: rgba(211, 47, 47, 0.1);
+      padding: 12px 15px;
+      font-weight: bold;
+      font-size: 14px;
+      color: #b71c1c;
+      border-bottom: 1px solid rgba(211, 47, 47, 0.2);
+    }
+
+    .judge-section-content {
+      padding: 15px;
+      line-height: 1.6;
+      color: #333;
+    }
+
+    /* Special styling for winner section */
+    .judge-section:first-child {
+      border-left-color: #f57c00;
+      background: rgba(255, 193, 7, 0.1);
+    }
+
+    .judge-section:first-child .judge-section-title {
+      background: rgba(245, 124, 0, 0.1);
+      color: #e65100;
+    }
+
+    /* Special styling for final score section */
+    .judge-section:last-child {
+      border-left-color: #388e3c;
+      background: rgba(76, 175, 80, 0.1);
+    }
+
+    .judge-section:last-child .judge-section-title {
+      background: rgba(56, 142, 60, 0.1);
+      color: #1b5e20;
+    }
+
+    /* Professional Moderator Report Styling (Blue Theme) */
+    .moderator-header {
+      background: linear-gradient(135deg, #1565c0 0%, #1976d2 100%);
+      color: white;
+      padding: 20px;
+      text-align: center;
+      border-radius: 12px 12px 0 0;
+      margin: -15px -15px 0 -15px;
+    }
+
+    .moderator-title {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+
+    .moderator-subtitle {
+      font-size: 14px;
+      opacity: 0.9;
+      font-style: italic;
+    }
+
+    .moderator-report {
+      padding: 20px 0;
+    }
+
+    .moderator-section {
+      margin-bottom: 20px;
+      background: white;
+      border-radius: 8px;
+      border-left: 4px solid #1976d2;
+      overflow: hidden;
+      border: 1px solid #f0f0f0;
+    }
+
+    .moderator-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .moderator-section-content {
+      padding: 15px;
+      line-height: 1.6;
+      color: #333;
+      background: rgba(255, 255, 255, 0.4);
     }
     .input-area {
       padding: 20px;
@@ -473,49 +595,37 @@
           enableInput();
         }
       } else if (msg.senderType === "ai") {
-        // AI Moderator - replace processing message with actual response
+        // AI Moderator - replace processing message with professional report
         const processingMsg = document.getElementById("ai-moderator-processing");
         if (processingMsg) {
-          // Replace the processing message
+          // Replace the processing message with professional report
           processingMsg.className = "message ai";
           processingMsg.id = ""; // Remove the ID
-          processingMsg.innerHTML = `
-            <div class="sender">🤖 ${msg.sender}</div>
-            <div class="text">${msg.text}</div>
-          `;
+          processingMsg.innerHTML = createModeratorReport(msg);
           // AI analysis is complete, re-enable input for next phase
           enableInput();
           return; // Don't create a new message
         } else {
           // Fallback: create new message if processing message not found
           messageClass += "ai";
-          div.innerHTML = `
-            <div class="sender">🤖 ${msg.sender}</div>
-            <div class="text">${msg.text}</div>
-          `;
+          div.innerHTML = createModeratorReport(msg);
           enableInput();
         }
       } else if (msg.senderType === "judge") {
-        // AI Judge - replace processing message with actual response
+        // AI Judge - replace processing message with structured report
         const processingMsg = document.getElementById("ai-judge-processing");
         if (processingMsg) {
-          // Replace the processing message
+          // Replace the processing message with structured report
           processingMsg.className = "message judge";
           processingMsg.id = ""; // Remove the ID
-          processingMsg.innerHTML = `
-            <div class="sender">⚖️ ${msg.sender}</div>
-            <div class="text">${msg.text}</div>
-          `;
+          processingMsg.innerHTML = createJudgeReport(msg);
           // Final judgment complete, show debate concluded state
           handleDebateCompleted();
           return; // Don't create a new message
         } else {
           // Fallback: create new message if processing message not found
           messageClass += "judge";
-          div.innerHTML = `
-            <div class="sender">⚖️ ${msg.sender}</div>
-            <div class="text">${msg.text}</div>
-          `;
+          div.innerHTML = createJudgeReport(msg);
           handleDebateCompleted();
         }
       } else if (msg.senderType === "user") {
@@ -735,6 +845,58 @@
       });
 
       // Don't auto-focus on page load - wait for debate to begin
+    }
+
+    function createModeratorReport(msg) {
+      // Create professional report similar to judge but with blue theme
+      return `
+        <div class="moderator-header">
+          <div class="moderator-title">🤖 ${msg.sender}</div>
+          <div class="moderator-subtitle">Phase Analysis & Insights</div>
+        </div>
+        <div class="moderator-report">
+          <div class="moderator-section">
+            <div class="moderator-section-content">${msg.text}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function createJudgeReport(msg) {
+      if (msg.judgeData) {
+        // Create structured professional report
+        return `
+          <div class="judge-header">
+            <div class="judge-title">⚖️ ${msg.sender}</div>
+            <div class="judge-subtitle">Final Verdict & Analysis</div>
+          </div>
+          <div class="judge-report">
+            ${createJudgeSection("🏆 Winner Declaration", msg.judgeData.winnerDeclaration)}
+            ${createJudgeSection("📊 Argument Analysis", msg.judgeData.argumentAnalysis)}
+            ${createJudgeSection("🎭 Debate Performance", msg.judgeData.debatePerformance)}
+            ${createJudgeSection("🧠 Evidence & Logic", msg.judgeData.evidenceLogic)}
+            ${createJudgeSection("💪 Persuasiveness", msg.judgeData.persuasiveness)}
+            ${createJudgeSection("🔄 Key Turning Points", msg.judgeData.keyTurningPoints)}
+            ${createJudgeSection("📈 Final Score", msg.judgeData.finalScore)}
+          </div>
+        `;
+      } else {
+        // Fallback to original text format
+        return `
+          <div class="sender">⚖️ ${msg.sender}</div>
+          <div class="text">${msg.text}</div>
+        `;
+      }
+    }
+
+    function createJudgeSection(title, content) {
+      if (!content) return '';
+      return `
+        <div class="judge-section">
+          <div class="judge-section-title">${title}</div>
+          <div class="judge-section-content">${content}</div>
+        </div>
+      `;
     }
 
     // Handle visibility change to show connection status

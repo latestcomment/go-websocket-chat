@@ -373,6 +373,50 @@ func (s *ChannelService) createPhaseContext(phaseId int, messages []models.Messa
 	return builder.String()
 }
 
+// parseJudgeResponse parses the structured AI judge response into JudgeReport
+func (s *ChannelService) parseJudgeResponse(response string) *models.JudgeReport {
+	judgeReport := &models.JudgeReport{}
+	
+	// Split response by #### headers
+	sections := strings.Split(response, "####")
+	
+	for _, section := range sections {
+		section = strings.TrimSpace(section)
+		if section == "" {
+			continue
+		}
+		
+		// Split header from content
+		lines := strings.Split(section, "\n")
+		if len(lines) < 2 {
+			continue
+		}
+		
+		header := strings.TrimSpace(lines[0])
+		content := strings.TrimSpace(strings.Join(lines[1:], "\n"))
+		
+		// Match header to field
+		switch {
+		case strings.Contains(strings.ToLower(header), "winner declaration"):
+			judgeReport.WinnerDeclaration = content
+		case strings.Contains(strings.ToLower(header), "argument analysis"):
+			judgeReport.ArgumentAnalysis = content
+		case strings.Contains(strings.ToLower(header), "debate performance"):
+			judgeReport.DebatePerformance = content
+		case strings.Contains(strings.ToLower(header), "evidence") && strings.Contains(strings.ToLower(header), "logic"):
+			judgeReport.EvidenceLogic = content
+		case strings.Contains(strings.ToLower(header), "persuasiveness"):
+			judgeReport.Persuasiveness = content
+		case strings.Contains(strings.ToLower(header), "key turning points"):
+			judgeReport.KeyTurningPoints = content
+		case strings.Contains(strings.ToLower(header), "final score"):
+			judgeReport.FinalScore = content
+		}
+	}
+	
+	return judgeReport
+}
+
 // sendPhaseSpecificAIRequest sends AI request with phase-appropriate prompt
 func (s *ChannelService) sendPhaseSpecificAIRequest(phaseId int, context string) (string, error) {
 	var prompt string
@@ -449,17 +493,30 @@ func (s *ChannelService) provideFinalAIJudgment(ch *models.Channel) {
 		context := s.createFinalJudgmentContext(allDebateMessages)
 		
 		// Get AI judgment
-		judgmentPrompt := `You are an impartial AI judge evaluating this complete debate. Please provide a comprehensive final verdict by:
+		judgmentPrompt := `You are an impartial AI judge evaluating this complete debate. Please provide your verdict using EXACTLY this structure with these section headers:
 
-1. **Winner Declaration**: Clearly state which participant presented the stronger overall case and why
-2. **Argument Analysis**: Evaluate the strongest and weakest arguments from each side
-3. **Debate Performance**: Assess how well each participant engaged in the structured debate format
-4. **Evidence & Logic**: Comment on the quality of evidence, reasoning, and logical consistency
-5. **Persuasiveness**: Determine which viewpoint was most compelling and convincing
-6. **Key Turning Points**: Identify critical moments that influenced the debate outcome
-7. **Final Score**: Provide a score out of 10 for each participant with brief justification
+#### Winner Declaration
+[Clearly state which participant won and provide a brief justification]
 
-Be decisive in your judgment while explaining your reasoning. Your verdict should be clear and definitive.`
+#### Argument Analysis  
+[Evaluate the strongest and weakest arguments from each side]
+
+#### Debate Performance
+[Assess how well each participant engaged in the structured debate format]
+
+#### Evidence & Logic
+[Comment on the quality of evidence, reasoning, and logical consistency]
+
+#### Persuasiveness
+[Determine which viewpoint was most compelling and convincing]
+
+#### Key Turning Points
+[Identify critical moments that influenced the debate outcome]
+
+#### Final Score
+[Provide a score out of 10 for each participant with brief justification]
+
+Be decisive in your judgment while explaining your reasoning. Use the exact section headers above with #### formatting.`
 
 		aiJudgment, err := SendAIRequestWithCustomPrompt(judgmentPrompt, context)
 		if err != nil {
@@ -467,12 +524,16 @@ Be decisive in your judgment while explaining your reasoning. Your verdict shoul
 			aiJudgment = "Unable to provide final judgment at this time."
 		}
 
-		// Broadcast final judgment
+		// Parse structured judgment
+		judgeData := s.parseJudgeResponse(aiJudgment)
+		
+		// Broadcast final judgment with structured data
 		judgmentMessage := models.Message{
 			SenderType: "judge",
 			SenderName: "AI Judge",
 			Text:       fmt.Sprintf("⚖️ **FINAL VERDICT** ⚖️\n\n%s", aiJudgment),
 			Timestamp:  time.Now(),
+			JudgeData:  judgeData,
 		}
 		s.BroadcastMessage(ch, judgmentMessage)
 	}
